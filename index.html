@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>课堂积分抽问系统-教师增强版 V7.0 (自动存档)</title>
+    <title>课堂积分抽问系统-教师增强版 V8.0</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary: #2c3e50; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --info: #3498db; --accent: #e67e22; }
@@ -33,6 +33,7 @@
         #main { flex: 1; display: flex; flex-direction: column; }
         .top-nav { height: 75px; background: #fff; display: flex; align-items: center; padding: 0 20px; gap: 15px; border-bottom: 1px solid #ddd; }
         
+        /* 修改：移除右边距，因为没有+号了 */
         .select-wrapper { display: flex; align-items: center; gap: 4px; background: #f8f9fa; padding: 6px 10px; border-radius: 6px; border: 1px solid #eee; }
         select { padding: 5px; border: 1px solid #ccc; border-radius: 4px; min-width: 110px; font-size: 14px; }
         
@@ -51,7 +52,7 @@
         .icon-btn { cursor: pointer; font-size: 18px; transition: 0.2s; user-select: none; }
         .del-btn { color: var(--danger); }
         .star-btn { color: #f1c40f; }
-        .plus-btn { color: var(--success); font-size: 28px; }
+        /* 删除了 .plus-btn 样式 */
     </style>
 </head>
 <body>
@@ -91,7 +92,6 @@
             <span class="icon-btn star-btn" title="导入Excel题库" onclick="prep('section')">⭐️</span>
             <span class="icon-btn del-btn" title="删除选中项" onclick="deleteOpt('section')">🗑️</span>
         </div>
-        <span class="icon-btn plus-btn" title="手动增加" onclick="addOpt()">+</span>
         
         <input type="file" id="qFile" hidden onchange="loadQuests(this)">
         <button class="ctrl-btn btn-start" style="margin-left: auto;" onclick="startQuiz()">开始答题</button>
@@ -127,7 +127,6 @@
         }
         if (savedQ) {
             qData = JSON.parse(savedQ);
-            // 恢复下拉框选项
             restoreSelect('book');
             restoreSelect('chapter');
             restoreSelect('section');
@@ -141,7 +140,6 @@
 
     function restoreSelect(type) {
         const sel = document.getElementById(`sel-${type}`);
-        // 清空除了第一个option以外的选项
         sel.innerHTML = `<option value="">选择${type==='book'?'书':(type==='chapter'?'章':'节')}</option>`;
         Object.keys(qData[type]).forEach(name => {
             const opt = document.createElement('option');
@@ -163,7 +161,7 @@
                 score: parseInt(r[1]) || 0
             }));
             updateRank();
-            saveData(); // 保存
+            saveData();
             alert("学生名单已导入并自动保存！");
         };
         reader.readAsArrayBuffer(input.files[0]);
@@ -196,11 +194,13 @@
         focus(rStu);
     }
 
-    // --- 题库管理 ---
+    // --- 题库管理 (核心修改处) ---
+    // 点击星星触发此函数，设置当前操作类型并打开文件选择
     function prep(t) { upType = t; document.getElementById('qFile').click(); }
     
     function loadQuests(input) {
         if(!input.files[0]) return;
+        // 获取文件名作为选项名
         const name = input.files[0].name.replace(/\.[^/.]+$/, "");
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -208,7 +208,7 @@
             const wb = XLSX.read(data, {type: 'array'});
             const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
             
-            // 只有当该名称不存在时才添加option，防止重复
+            // 自动检测并添加新选项到下拉框
             if(!qData[upType][name]) {
                 const sel = document.getElementById(`sel-${upType}`);
                 const opt = document.createElement('option');
@@ -216,10 +216,11 @@
                 sel.add(opt);
             }
             
+            // 存储题库数据
             qData[upType][name] = json;
-            input.value = "";
-            saveData(); // 保存
-            alert(`题库【${name}】导入成功并已保存！`);
+            input.value = ""; // 清空input防止重复导入失效
+            saveData();
+            alert(`已导入题库：【${name}】`);
         };
         reader.readAsArrayBuffer(input.files[0]);
     }
@@ -231,7 +232,7 @@
         if(confirm(`确定要永久删除【${val}】及其题库吗？`)) {
             sel.remove(sel.selectedIndex);
             delete qData[type][val];
-            saveData(); // 保存更改
+            saveData();
         }
     }
 
@@ -259,7 +260,7 @@
         curStu.score += p;
         updateRank();
         focus(curStu);
-        saveData(); // 每次打分都自动保存
+        saveData();
     }
 
     function rename(el) {
@@ -268,47 +269,20 @@
         if(n && n !== oldName) {
             el.options[el.selectedIndex].text = n;
             el.options[el.selectedIndex].value = n;
-            
-            // 更新数据结构中的key
-            let type = el.id.split('-')[1]; // book, chapter, or section
+            let type = el.id.split('-')[1]; 
             qData[type][n] = qData[type][oldName];
             delete qData[type][oldName];
             saveData();
         }
     }
 
-    function addOpt() {
-        let inputType = prompt("请输入数字增加选项：\n1 - 书 (book)\n2 - 章 (chapter)\n3 - 节 (section)");
-        let t = "";
-        if(inputType === "1" || inputType === "book") t = "book";
-        else if(inputType === "2" || inputType === "chapter") t = "chapter";
-        else if(inputType === "3" || inputType === "section") t = "section";
-        
-        if(t) {
-            const n = prompt("请输入选项名称:");
-            if(n) {
-                if(qData[t][n]) return alert("该名称已存在！");
-                const sel = document.getElementById(`sel-${t}`);
-                const opt = document.createElement('option');
-                opt.value = n; opt.text = n;
-                sel.add(opt);
-                sel.value = n;
-                qData[t][n] = []; 
-                saveData(); // 保存
-            }
-        }
-    }
-
-    // --- 新增：导出与清理 ---
+    // --- 导出与清理 ---
     function exportData() {
         if(students.length === 0) return alert("没有数据可导出");
-        // 准备数据：表头 + 内容
         const data = [["姓名", "积分"], ...students.map(s => [s.name, s.score])];
         const ws = XLSX.utils.aoa_to_sheet(data);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "学生积分");
-        
-        // 生成文件名：学生积分_日期.xlsx
         const date = new Date().toISOString().slice(0,10);
         XLSX.writeFile(wb, `课堂积分表_${date}.xlsx`);
     }
@@ -317,7 +291,7 @@
         if(confirm("警告：这将清空所有导入的学生、题库和积分记录！\n确定要重置吗？")) {
             localStorage.removeItem('class_students');
             localStorage.removeItem('class_qdata');
-            location.reload(); // 刷新页面
+            location.reload();
         }
     }
 </script>
