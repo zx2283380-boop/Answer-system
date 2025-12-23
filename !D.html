@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>课堂积分抽问系统-教师增强版 V6.0</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --info: #3498db; --accent: #e67e22; }
+        body { margin: 0; display: flex; height: 100vh; font-family: "Microsoft YaHei", sans-serif; background: #f0f2f5; overflow: hidden; }
+        
+        /* 左侧积分系统 */
+        #sidebar { width: 350px; border-right: 2px solid #ddd; display: flex; flex-direction: column; background: #fff; box-shadow: 2px 0 10px rgba(0,0,0,0.05); }
+        .naming-section { height: 260px; border-bottom: 2px solid #eee; padding: 20px; text-align: center; background: #fafafa; }
+        .ranking-section { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        .student-card { display: flex; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; }
+        .student-card:hover { background: #eef7ff; transform: translateX(5px); }
+        .rank-icon { width: 50px; font-weight: bold; font-size: 18px; color: #7f8c8d; }
+        .st-name { flex: 1; font-size: 16px; }
+        .st-score { font-weight: bold; width: 60px; text-align: right; color: var(--info); }
+
+        .btn-random-name { 
+            background: var(--accent); color: white; border: none; padding: 10px 20px; 
+            border-radius: 20px; font-size: 18px; font-weight: bold; cursor: pointer;
+            margin: 10px 0; width: 80%; transition: 0.2s; box-shadow: 0 4px 0 #d35400;
+        }
+        .btn-random-name:active { transform: translateY(3px); box-shadow: none; }
+
+        /* 右侧主面板 */
+        #main { flex: 1; display: flex; flex-direction: column; }
+        .top-nav { height: 75px; background: #fff; display: flex; align-items: center; padding: 0 20px; gap: 15px; border-bottom: 1px solid #ddd; }
+        
+        .select-wrapper { display: flex; align-items: center; gap: 4px; background: #f8f9fa; padding: 6px 10px; border-radius: 6px; border: 1px solid #eee; }
+        select { padding: 5px; border: 1px solid #ccc; border-radius: 4px; min-width: 110px; font-size: 14px; }
+        
+        .whiteboard { flex: 1; margin: 25px; background: white; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); position: relative; }
+        #question-area { font-size: 40px; font-weight: bold; text-align: center; max-width: 90%; color: #333; line-height: 1.4; }
+        #answer-area { font-size: 28px; color: var(--danger); margin-top: 35px; display: none; background: #fff5f5; padding: 15px 30px; border-radius: 10px; border: 1px dashed var(--danger); }
+        
+        .btns { margin-top: 40px; display: flex; gap: 20px; }
+        .ctrl-btn { padding: 12px 30px; cursor: pointer; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; transition: 0.2s; box-shadow: 0 3px 6px rgba(0,0,0,0.1); }
+        
+        .btn-start { background: var(--info); color: white; font-size: 22px; }
+        .btn-check { background: var(--success); color: white; }
+        .btn-circle { background: var(--warning); color: white; }
+        .btn-cross { background: var(--danger); color: white; }
+        
+        .icon-btn { cursor: pointer; font-size: 18px; transition: 0.2s; user-select: none; }
+        .del-btn { color: var(--danger); }
+        .star-btn { color: #f1c40f; }
+        .plus-btn { color: var(--success); font-size: 28px; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="naming-section">
+        <div style="font-size: 14px; color: #999; margin-bottom: 5px;">正在提问：</div>
+        <div id="current-name" style="font-size: 38px; font-weight: bold; color: var(--accent); min-height: 50px;">等待抽问</div>
+        <div id="current-score-val" style="font-size: 18px; color: #7f8c8d; margin-bottom: 10px;">积分: --</div>
+        
+        <button class="btn-random-name" onclick="randomPickStudent()">🎯 随机点名</button>
+        
+        <input type="file" id="stuFile" hidden accept=".xlsx, .xls" onchange="loadStudents(this)">
+        <button onclick="document.getElementById('stuFile').click()" style="margin-top:10px; background:none; border:none; color:#999; text-decoration:underline; font-size:12px; cursor:pointer;">📁 导入/更新学生积分表</button>
+    </div>
+    <div class="ranking-section" id="rank-box"></div>
+</div>
+
+<div id="main">
+    <div class="top-nav">
+        <div class="select-wrapper">
+            <select id="sel-book" ondoubleclick="rename(this)"><option value="">选择书</option></select>
+            <span class="icon-btn star-btn" title="导入Excel题库" onclick="prep('book')">⭐️</span>
+            <span class="icon-btn del-btn" title="删除选中项" onclick="deleteOpt('book')">🗑️</span>
+        </div>
+        <div class="select-wrapper">
+            <select id="sel-chapter" ondoubleclick="rename(this)"><option value="">选择章</option></select>
+            <span class="icon-btn star-btn" title="导入Excel题库" onclick="prep('chapter')">⭐️</span>
+            <span class="icon-btn del-btn" title="删除选中项" onclick="deleteOpt('chapter')">🗑️</span>
+        </div>
+        <div class="select-wrapper">
+            <select id="sel-section" ondoubleclick="rename(this)"><option value="">选择节</option></select>
+            <span class="icon-btn star-btn" title="导入Excel题库" onclick="prep('section')">⭐️</span>
+            <span class="icon-btn del-btn" title="删除选中项" onclick="deleteOpt('section')">🗑️</span>
+        </div>
+        <span class="icon-btn plus-btn" title="手动增加" onclick="addOpt()">+</span>
+        
+        <input type="file" id="qFile" hidden onchange="loadQuests(this)">
+        <button class="ctrl-btn btn-start" style="margin-left: auto;" onclick="startQuiz()">开始答题</button>
+    </div>
+
+    <div class="whiteboard">
+        <div id="question-area">欢迎使用课堂回答积分系统</div>
+        <div id="answer-area"></div>
+        <div class="btns" id="ctrl-panel" style="display:none">
+            <button class="ctrl-btn" style="background:#95a5a6; color:white;" onclick="document.getElementById('answer-area').style.display='block'">💡 看答案</button>
+            <button class="ctrl-btn btn-check" onclick="doScore(5)">✔️ +5分</button>
+            <button class="ctrl-btn btn-circle" onclick="doScore(0)">⭕ +0分</button>
+            <button class="ctrl-btn btn-cross" onclick="doScore(-5)">❌ -5分</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let students = [];
+    let qData = { book: {}, chapter: {}, section: {} };
+    let curStu = null;
+    let upType = '';
+
+    function loadStudents(input) {
+        if(!input.files[0]) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, {type: 'array'});
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+            students = json.filter(r => r[0] && r[0] !== "姓名").map(r => ({
+                name: String(r[0]),
+                score: parseInt(r[1]) || 0
+            }));
+            updateRank();
+        };
+        reader.readAsArrayBuffer(input.files[0]);
+    }
+
+    function updateRank() {
+        const box = document.getElementById('rank-box');
+        const sorted = [...students].sort((a, b) => b.score - a.score);
+        box.innerHTML = '<h4 style="text-align:center;color:#7f8c8d;margin:5px 0;">实时积分排行榜</h4>';
+        sorted.forEach((s, i) => {
+            let rank = i + 1;
+            if(rank === 1) rank = "🥇"; else if(rank === 2) rank = "🥈"; else if(rank === 3) rank = "🥉";
+            const div = document.createElement('div');
+            div.className = 'student-card';
+            div.onclick = () => focus(s);
+            div.innerHTML = `<span class="rank-icon">${rank}</span><span class="st-name">${s.name}</span><span class="st-score">${s.score}分</span>`;
+            box.appendChild(div);
+        });
+    }
+
+    function focus(s) {
+        curStu = s;
+        document.getElementById('current-name').innerText = s.name;
+        document.getElementById('current-score-val').innerText = `当前积分: ${s.score}`;
+    }
+
+    function randomPickStudent() {
+        if(students.length === 0) return alert("请先导入学生名单积分表");
+        const rStu = students[Math.floor(Math.random() * students.length)];
+        focus(rStu);
+    }
+
+    function prep(t) { upType = t; document.getElementById('qFile').click(); }
+    
+    function loadQuests(input) {
+        if(!input.files[0]) return;
+        const name = input.files[0].name.replace(/\.[^/.]+$/, "");
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, {type: 'array'});
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            const sel = document.getElementById(`sel-${upType}`);
+            const opt = document.createElement('option');
+            opt.value = name; opt.text = name;
+            sel.add(opt);
+            sel.value = name;
+            qData[upType][name] = json;
+            input.value = "";
+        };
+        reader.readAsArrayBuffer(input.files[0]);
+    }
+
+    function deleteOpt(type) {
+        const sel = document.getElementById(`sel-${type}`);
+        const val = sel.value;
+        if(!val) return alert("请选择要删除项");
+        if(confirm(`删除【${val}】吗？`)) {
+            sel.remove(sel.selectedIndex);
+            delete qData[type][val];
+        }
+    }
+
+    function startQuiz() {
+        const s = document.getElementById('sel-section').value;
+        const c = document.getElementById('sel-chapter').value;
+        const b = document.getElementById('sel-book').value;
+        let pool = [];
+        if(s) pool = qData.section[s]; else if(c) pool = qData.chapter[c]; else if(b) pool = qData.book[b];
+        if(!pool || pool.length === 0) return alert("未发现题库，请先点击⭐️导入");
+        
+        const q = pool[Math.floor(Math.random() * pool.length)];
+        const keys = Object.keys(q);
+        document.getElementById('question-area').innerText = q[keys[0]];
+        document.getElementById('answer-area').innerText = "答案：" + (q[keys[1]] || "无");
+        document.getElementById('answer-area').style.display = 'none';
+        
+        randomPickStudent();
+        document.getElementById('ctrl-panel').style.display = 'flex';
+    }
+
+    function doScore(p) {
+        if(!curStu) return;
+        curStu.score += p;
+        updateRank();
+        focus(curStu);
+    }
+
+    function rename(el) {
+        const n = prompt("重命名：", el.options[el.selectedIndex].text);
+        if(n) el.options[el.selectedIndex].text = n;
+    }
+
+    /**
+     * 修正后的添加逻辑：支持数字输入快捷操作
+     */
+    function addOpt() {
+        let inputType = prompt("请输入对应数字增加选项：\n1 - 书 (book)\n2 - 章 (chapter)\n3 - 节 (section)");
+        
+        let t = "";
+        if(inputType === "1" || inputType === "book") t = "book";
+        else if(inputType === "2" || inputType === "chapter") t = "chapter";
+        else if(inputType === "3" || inputType === "section") t = "section";
+        
+        if(t && qData[t]) {
+            const n = prompt("请输入选项名称 (例如：必修一、第一单元等):");
+            if(n) {
+                const sel = document.getElementById(`sel-${t}`);
+                const opt = document.createElement('option');
+                opt.value = n; opt.text = n;
+                sel.add(opt);
+                sel.value = n;
+                qData[t][n] = []; 
+            }
+        } else if(inputType !== null) {
+            alert("无效输入，请输入 1, 2 或 3");
+        }
+    }
+</script>
+</body>
+</html>
