@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>课堂积分抽问系统-教师增强版 V8.0</title>
+    <title>课堂积分抽问系统-教师增强版 V9.0</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary: #2c3e50; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --info: #3498db; --accent: #e67e22; }
@@ -33,7 +33,6 @@
         #main { flex: 1; display: flex; flex-direction: column; }
         .top-nav { height: 75px; background: #fff; display: flex; align-items: center; padding: 0 20px; gap: 15px; border-bottom: 1px solid #ddd; }
         
-        /* 修改：移除右边距，因为没有+号了 */
         .select-wrapper { display: flex; align-items: center; gap: 4px; background: #f8f9fa; padding: 6px 10px; border-radius: 6px; border: 1px solid #eee; }
         select { padding: 5px; border: 1px solid #ccc; border-radius: 4px; min-width: 110px; font-size: 14px; }
         
@@ -52,7 +51,6 @@
         .icon-btn { cursor: pointer; font-size: 18px; transition: 0.2s; user-select: none; }
         .del-btn { color: var(--danger); }
         .star-btn { color: #f1c40f; }
-        /* 删除了 .plus-btn 样式 */
     </style>
 </head>
 <body>
@@ -194,13 +192,11 @@
         focus(rStu);
     }
 
-    // --- 题库管理 (核心修改处) ---
-    // 点击星星触发此函数，设置当前操作类型并打开文件选择
+    // --- 题库管理 ---
     function prep(t) { upType = t; document.getElementById('qFile').click(); }
     
     function loadQuests(input) {
         if(!input.files[0]) return;
-        // 获取文件名作为选项名
         const name = input.files[0].name.replace(/\.[^/.]+$/, "");
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -208,7 +204,6 @@
             const wb = XLSX.read(data, {type: 'array'});
             const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
             
-            // 自动检测并添加新选项到下拉框
             if(!qData[upType][name]) {
                 const sel = document.getElementById(`sel-${upType}`);
                 const opt = document.createElement('option');
@@ -216,9 +211,8 @@
                 sel.add(opt);
             }
             
-            // 存储题库数据
             qData[upType][name] = json;
-            input.value = ""; // 清空input防止重复导入失效
+            input.value = ""; 
             saveData();
             alert(`已导入题库：【${name}】`);
         };
@@ -236,7 +230,7 @@
         }
     }
 
-    // --- 互动逻辑 ---
+    // --- 互动逻辑 (核心修改处) ---
     function startQuiz() {
         const s = document.getElementById('sel-section').value;
         const c = document.getElementById('sel-chapter').value;
@@ -251,12 +245,15 @@
         document.getElementById('answer-area').innerText = "答案：" + (q[keys[1]] || "无");
         document.getElementById('answer-area').style.display = 'none';
         
-        randomPickStudent();
+        // 移除自动抽人逻辑
+        // randomPickStudent(); 
+        
         document.getElementById('ctrl-panel').style.display = 'flex';
     }
 
     function doScore(p) {
-        if(!curStu) return;
+        // 如果老师没点名就直接按分，提示一下
+        if(!curStu) return alert("请先点击左侧的“🎯 随机点名”或手动选择一名学生！");
         curStu.score += p;
         updateRank();
         focus(curStu);
