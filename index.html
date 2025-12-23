@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>课堂积分抽问系统-教师增强版 V6.0</title>
+    <title>课堂积分抽问系统-教师增强版 V7.0 (自动存档)</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary: #2c3e50; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --info: #3498db; --accent: #e67e22; }
@@ -10,7 +10,7 @@
         
         /* 左侧积分系统 */
         #sidebar { width: 350px; border-right: 2px solid #ddd; display: flex; flex-direction: column; background: #fff; box-shadow: 2px 0 10px rgba(0,0,0,0.05); }
-        .naming-section { height: 260px; border-bottom: 2px solid #eee; padding: 20px; text-align: center; background: #fafafa; }
+        .naming-section { height: 280px; border-bottom: 2px solid #eee; padding: 20px; text-align: center; background: #fafafa; }
         .ranking-section { flex: 1; overflow-y: auto; padding: 10px; }
         
         .student-card { display: flex; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: 0.2s; }
@@ -25,6 +25,9 @@
             margin: 10px 0; width: 80%; transition: 0.2s; box-shadow: 0 4px 0 #d35400;
         }
         .btn-random-name:active { transform: translateY(3px); box-shadow: none; }
+
+        .file-btn { background:none; border:none; color:#666; text-decoration:underline; font-size:12px; cursor:pointer; margin: 2px 5px; }
+        .file-btn:hover { color: var(--info); }
 
         /* 右侧主面板 */
         #main { flex: 1; display: flex; flex-direction: column; }
@@ -61,8 +64,12 @@
         
         <button class="btn-random-name" onclick="randomPickStudent()">🎯 随机点名</button>
         
-        <input type="file" id="stuFile" hidden accept=".xlsx, .xls" onchange="loadStudents(this)">
-        <button onclick="document.getElementById('stuFile').click()" style="margin-top:10px; background:none; border:none; color:#999; text-decoration:underline; font-size:12px; cursor:pointer;">📁 导入/更新学生积分表</button>
+        <div style="margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+            <input type="file" id="stuFile" hidden accept=".xlsx, .xls" onchange="loadStudents(this)">
+            <button onclick="document.getElementById('stuFile').click()" class="file-btn">📁 导入/更新积分表</button>
+            <button onclick="exportData()" class="file-btn" style="color:#27ae60">💾 导出最新积分表(Excel)</button>
+            <button onclick="clearAllData()" class="file-btn" style="color:#e74c3c">🗑️ 重置所有数据</button>
+        </div>
     </div>
     <div class="ranking-section" id="rank-box"></div>
 </div>
@@ -103,11 +110,47 @@
 </div>
 
 <script>
+    // --- 数据变量 ---
     let students = [];
     let qData = { book: {}, chapter: {}, section: {} };
     let curStu = null;
     let upType = '';
 
+    // --- 页面加载时恢复数据 ---
+    window.onload = function() {
+        const savedStu = localStorage.getItem('class_students');
+        const savedQ = localStorage.getItem('class_qdata');
+
+        if (savedStu) {
+            students = JSON.parse(savedStu);
+            updateRank();
+        }
+        if (savedQ) {
+            qData = JSON.parse(savedQ);
+            // 恢复下拉框选项
+            restoreSelect('book');
+            restoreSelect('chapter');
+            restoreSelect('section');
+        }
+    };
+
+    function saveData() {
+        localStorage.setItem('class_students', JSON.stringify(students));
+        localStorage.setItem('class_qdata', JSON.stringify(qData));
+    }
+
+    function restoreSelect(type) {
+        const sel = document.getElementById(`sel-${type}`);
+        // 清空除了第一个option以外的选项
+        sel.innerHTML = `<option value="">选择${type==='book'?'书':(type==='chapter'?'章':'节')}</option>`;
+        Object.keys(qData[type]).forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name; opt.text = name;
+            sel.add(opt);
+        });
+    }
+
+    // --- 学生管理 ---
     function loadStudents(input) {
         if(!input.files[0]) return;
         const reader = new FileReader();
@@ -120,6 +163,8 @@
                 score: parseInt(r[1]) || 0
             }));
             updateRank();
+            saveData(); // 保存
+            alert("学生名单已导入并自动保存！");
         };
         reader.readAsArrayBuffer(input.files[0]);
     }
@@ -151,6 +196,7 @@
         focus(rStu);
     }
 
+    // --- 题库管理 ---
     function prep(t) { upType = t; document.getElementById('qFile').click(); }
     
     function loadQuests(input) {
@@ -161,13 +207,19 @@
             const data = new Uint8Array(e.target.result);
             const wb = XLSX.read(data, {type: 'array'});
             const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-            const sel = document.getElementById(`sel-${upType}`);
-            const opt = document.createElement('option');
-            opt.value = name; opt.text = name;
-            sel.add(opt);
-            sel.value = name;
+            
+            // 只有当该名称不存在时才添加option，防止重复
+            if(!qData[upType][name]) {
+                const sel = document.getElementById(`sel-${upType}`);
+                const opt = document.createElement('option');
+                opt.value = name; opt.text = name;
+                sel.add(opt);
+            }
+            
             qData[upType][name] = json;
             input.value = "";
+            saveData(); // 保存
+            alert(`题库【${name}】导入成功并已保存！`);
         };
         reader.readAsArrayBuffer(input.files[0]);
     }
@@ -176,12 +228,14 @@
         const sel = document.getElementById(`sel-${type}`);
         const val = sel.value;
         if(!val) return alert("请选择要删除项");
-        if(confirm(`删除【${val}】吗？`)) {
+        if(confirm(`确定要永久删除【${val}】及其题库吗？`)) {
             sel.remove(sel.selectedIndex);
             delete qData[type][val];
+            saveData(); // 保存更改
         }
     }
 
+    // --- 互动逻辑 ---
     function startQuiz() {
         const s = document.getElementById('sel-section').value;
         const c = document.getElementById('sel-chapter').value;
@@ -205,39 +259,67 @@
         curStu.score += p;
         updateRank();
         focus(curStu);
+        saveData(); // 每次打分都自动保存
     }
 
     function rename(el) {
-        const n = prompt("重命名：", el.options[el.selectedIndex].text);
-        if(n) el.options[el.selectedIndex].text = n;
+        const oldName = el.options[el.selectedIndex].text;
+        const n = prompt("重命名：", oldName);
+        if(n && n !== oldName) {
+            el.options[el.selectedIndex].text = n;
+            el.options[el.selectedIndex].value = n;
+            
+            // 更新数据结构中的key
+            let type = el.id.split('-')[1]; // book, chapter, or section
+            qData[type][n] = qData[type][oldName];
+            delete qData[type][oldName];
+            saveData();
+        }
     }
 
-    /**
-     * 修正后的添加逻辑：支持数字输入快捷操作
-     */
     function addOpt() {
-        let inputType = prompt("请输入对应数字增加选项：\n1 - 书 (book)\n2 - 章 (chapter)\n3 - 节 (section)");
-        
+        let inputType = prompt("请输入数字增加选项：\n1 - 书 (book)\n2 - 章 (chapter)\n3 - 节 (section)");
         let t = "";
         if(inputType === "1" || inputType === "book") t = "book";
         else if(inputType === "2" || inputType === "chapter") t = "chapter";
         else if(inputType === "3" || inputType === "section") t = "section";
         
-        if(t && qData[t]) {
-            const n = prompt("请输入选项名称 (例如：必修一、第一单元等):");
+        if(t) {
+            const n = prompt("请输入选项名称:");
             if(n) {
+                if(qData[t][n]) return alert("该名称已存在！");
                 const sel = document.getElementById(`sel-${t}`);
                 const opt = document.createElement('option');
                 opt.value = n; opt.text = n;
                 sel.add(opt);
                 sel.value = n;
                 qData[t][n] = []; 
+                saveData(); // 保存
             }
-        } else if(inputType !== null) {
-            alert("无效输入，请输入 1, 2 或 3");
+        }
+    }
+
+    // --- 新增：导出与清理 ---
+    function exportData() {
+        if(students.length === 0) return alert("没有数据可导出");
+        // 准备数据：表头 + 内容
+        const data = [["姓名", "积分"], ...students.map(s => [s.name, s.score])];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "学生积分");
+        
+        // 生成文件名：学生积分_日期.xlsx
+        const date = new Date().toISOString().slice(0,10);
+        XLSX.writeFile(wb, `课堂积分表_${date}.xlsx`);
+    }
+
+    function clearAllData() {
+        if(confirm("警告：这将清空所有导入的学生、题库和积分记录！\n确定要重置吗？")) {
+            localStorage.removeItem('class_students');
+            localStorage.removeItem('class_qdata');
+            location.reload(); // 刷新页面
         }
     }
 </script>
 </body>
-
 </html>
